@@ -15,7 +15,7 @@ import notificationRoutes from './routes/notificationRoutes';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 const corsOptions = {
   origin: '*', // Allow all origins (for development)
   methods: 'GET,POST,PUT,DELETE',
