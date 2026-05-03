@@ -36,7 +36,7 @@ app.get('/', async (req, res) => {
         schedules: '/api/schedules',
         notifications: '/api/notifications',
         payments: '/api/payments',
-        admin: '/api/admin',
+        /*admin: '/api/admin',*/
       },
     });
   } catch (err) {
