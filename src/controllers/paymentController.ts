@@ -68,14 +68,15 @@ export const initiatePayment = async (req: AuthRequest, res: Response): Promise<
     // Calculate amount based on currency
     let amount: number;
     let paymentCurrency: string;
+    amount = 1000; // Test amount for sandbox
 
-    if (currency === 'USD') {
+    /*if (currency === 'USD') {
       amount = 35 * numPassengers;
       paymentCurrency = 'USD';
     } else {
       amount = schedule.price_ugx * numPassengers;
       paymentCurrency = 'UGX';
-    }
+    }*/
 
     // Generate QR code
     const qr_code = require('crypto').randomBytes(20).toString('hex');
