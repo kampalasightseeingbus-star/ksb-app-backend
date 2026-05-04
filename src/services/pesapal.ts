@@ -4,7 +4,7 @@ import pool from '../config/database';
 // Pesapal API URLs
 const PESAPAL_BASE_URL = process.env.PESAPAL_ENV === 'live'
   ? 'https://pay.pesapal.com/v3'
-  : 'https://pay.pesapal.com/pesapalv3';
+  : 'https://pay.pesapal.com/v3';
 
 // Store access token in memory
 let accessToken: string | null = null;
