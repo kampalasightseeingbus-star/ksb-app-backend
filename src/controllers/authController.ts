@@ -5,8 +5,7 @@ import pool from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 
 // ─── TEMPORARY OTP STORE ──────────────────────────────────────────
-// Stores OTPs in memory while user is verifying
-// Key is phone number, value is OTP and expiry time
+// Fallback in-memory store if database is unavailable
 const otpStore: Record<string, { otp: string; expires: number; userData: any }> = {};
 
 // ─── SEND OTP ─────────────────────────────────────────────────────
@@ -39,12 +38,23 @@ export const sendOTP = async (req: Request, res: Response): Promise<any> => {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expires = Date.now() + 5 * 60 * 1000; // Expires in 5 minutes
 
-    // Store OTP and user data temporarily until verified
+    // Store OTP in memory (fallback)
     otpStore[phone] = {
       otp,
       expires,
       userData: { first_name, last_name, phone },
     };
+
+    // Store OTP in database (primary)
+    try {
+      await pool.query('DELETE FROM otps WHERE phone = $1', [phone]);
+      await pool.query(
+        'INSERT INTO otps (phone, otp, expires_at, user_data) VALUES ($1, $2, $3, $4)',
+        [phone, otp, expires, JSON.stringify({ first_name, last_name, phone })]
+      );
+    } catch (dbErr) {
+      console.error('Failed to store OTP in database, using memory fallback:', dbErr);
+    }
 
     // Format phone for Uganda (+256)
     const formattedPhone = phone.startsWith('+')
@@ -77,10 +87,7 @@ export const sendOTP = async (req: Request, res: Response): Promise<any> => {
     return res.json({
       message: 'OTP sent successfully',
       debug_otp: otp,
-      // Only show OTP in development for testing
-      //...(process.env.NODE_ENV !== 'production' && { debug_otp: otp }),
     });
-
   } catch (err) {
     console.error('Send OTP error:', err);
     return res.status(500).json({ message: 'Server error' });
@@ -97,45 +104,75 @@ export const verifyOTPAndRegister = async (req: Request, res: Response): Promise
     return res.status(400).json({ message: 'Phone and OTP are required' });
   }
 
-  const stored = otpStore[phone];
-
-  // Check if OTP exists for this phone
-  if (!stored) {
-    return res.status(400).json({
-      message: 'No OTP found for this number. Please register again.',
-    });
-  }
-
-  // Check if OTP has expired
-  if (Date.now() > stored.expires) {
-    delete otpStore[phone];
-    return res.status(400).json({
-      message: 'OTP has expired. Please register again.',
-    });
-  }
-
-  // Check if OTP is correct
-  if (stored.otp !== otp.toString()) {
-    return res.status(400).json({
-      message: 'Incorrect OTP. Please try again.',
-    });
-  }
-
   try {
-    const { first_name, last_name, phone: userPhone } = stored.userData;
-    const full_name = `${first_name} ${last_name}`;
+    let storedOtp: string | null = null;
+    let storedExpires: number | null = null;
+    let userData: any = null;
+    let otpId: number | null = null;
+
+    // Try database first
+    try {
+      const otpResult = await pool.query(
+        'SELECT * FROM otps WHERE phone = $1 ORDER BY created_at DESC LIMIT 1',
+        [phone]
+      );
+
+      if (otpResult.rows.length > 0) {
+        storedOtp = otpResult.rows[0].otp;
+        storedExpires = otpResult.rows[0].expires_at;
+        userData = otpResult.rows[0].user_data;
+        otpId = otpResult.rows[0].id;
+      }
+    } catch (dbErr) {
+      console.error('Failed to read OTP from database, trying memory:', dbErr);
+    }
+
+    // Fallback to memory if database failed or returned nothing
+    if (!storedOtp && otpStore[phone]) {
+      const memoryStore = otpStore[phone];
+      storedOtp = memoryStore.otp;
+      storedExpires = memoryStore.expires;
+      userData = memoryStore.userData;
+    }
+
+    // Check if OTP exists
+    if (!storedOtp) {
+      return res.status(400).json({
+        message: 'No OTP found for this number. Please register again.',
+      });
+    }
+
+    // Check if OTP has expired
+    if (Date.now() > storedExpires!) {
+      // Clean up
+      if (otpId) await pool.query('DELETE FROM otps WHERE id = $1', [otpId]);
+      delete otpStore[phone];
+      return res.status(400).json({
+        message: 'OTP has expired. Please register again.',
+      });
+    }
+
+    // Check if OTP is correct
+    if (storedOtp !== otp.toString()) {
+      return res.status(400).json({
+        message: 'Incorrect OTP. Please try again.',
+      });
+    }
+
+    const full_name = `${userData.first_name} ${userData.last_name}`;
 
     // Create user account in database
     const result = await pool.query(
       `INSERT INTO users (full_name, phone, role)
        VALUES ($1, $2, 'passenger')
        RETURNING id, full_name, phone, role`,
-      [full_name, userPhone]
+      [full_name, userData.phone]
     );
 
     const user = result.rows[0];
 
-    // Clear OTP from store
+    // Clean up OTP from both stores
+    if (otpId) await pool.query('DELETE FROM otps WHERE id = $1', [otpId]);
     delete otpStore[phone];
 
     // Generate JWT token for the user
@@ -152,7 +189,7 @@ export const verifyOTPAndRegister = async (req: Request, res: Response): Promise
       [
         user.id,
         'Welcome to KSB! 🚌',
-        `Welcome ${first_name}! Your account is ready. Book your first Kampala Sightseeing Tour today.`,
+        `Welcome ${userData.first_name}! Your account is ready. Book your first Kampala Sightseeing Tour today.`,
       ]
     );
 
@@ -195,7 +232,19 @@ export const sendLoginOTP = async (req: Request, res: Response): Promise<any> =>
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expires = Date.now() + 5 * 60 * 1000;
 
+    // Store OTP in memory (fallback)
     otpStore[phone] = { otp, expires, userData: user };
+
+    // Store OTP in database (primary)
+    try {
+      await pool.query('DELETE FROM otps WHERE phone = $1', [phone]);
+      await pool.query(
+        'INSERT INTO otps (phone, otp, expires_at, user_data) VALUES ($1, $2, $3, $4)',
+        [phone, otp, expires, JSON.stringify(user)]
+      );
+    } catch (dbErr) {
+      console.error('Failed to store login OTP in database, using memory fallback:', dbErr);
+    }
 
     // Format phone
     const formattedPhone = phone.startsWith('+')
@@ -226,7 +275,7 @@ export const sendLoginOTP = async (req: Request, res: Response): Promise<any> =>
 
     return res.json({
       message: 'OTP sent to your phone',
-      ...(process.env.NODE_ENV !== 'production' && { debug_otp: otp }),
+      debug_otp: otp,
     });
   } catch (err) {
     console.error('Send login OTP error:', err);
@@ -243,26 +292,52 @@ export const verifyLoginOTP = async (req: Request, res: Response): Promise<any> 
     return res.status(400).json({ message: 'Phone and OTP are required' });
   }
 
-  const stored = otpStore[phone];
-
-  if (!stored) {
-    return res.status(400).json({
-      message: 'No OTP found. Please request a new one.',
-    });
-  }
-
-  if (Date.now() > stored.expires) {
-    delete otpStore[phone];
-    return res.status(400).json({
-      message: 'OTP expired. Please request a new one.',
-    });
-  }
-
-  if (stored.otp !== otp.toString()) {
-    return res.status(400).json({ message: 'Incorrect OTP. Please try again.' });
-  }
-
   try {
+    let storedOtp: string | null = null;
+    let storedExpires: number | null = null;
+    let otpId: number | null = null;
+
+    // Try database first
+    try {
+      const otpResult = await pool.query(
+        'SELECT * FROM otps WHERE phone = $1 ORDER BY created_at DESC LIMIT 1',
+        [phone]
+      );
+
+      if (otpResult.rows.length > 0) {
+        storedOtp = otpResult.rows[0].otp;
+        storedExpires = otpResult.rows[0].expires_at;
+        otpId = otpResult.rows[0].id;
+      }
+    } catch (dbErr) {
+      console.error('Failed to read OTP from database, trying memory:', dbErr);
+    }
+
+    // Fallback to memory
+    if (!storedOtp && otpStore[phone]) {
+      const memoryStore = otpStore[phone];
+      storedOtp = memoryStore.otp;
+      storedExpires = memoryStore.expires;
+    }
+
+    if (!storedOtp) {
+      return res.status(400).json({
+        message: 'No OTP found. Please request a new one.',
+      });
+    }
+
+    if (Date.now() > storedExpires!) {
+      if (otpId) await pool.query('DELETE FROM otps WHERE id = $1', [otpId]);
+      delete otpStore[phone];
+      return res.status(400).json({
+        message: 'OTP expired. Please request a new one.',
+      });
+    }
+
+    if (storedOtp !== otp.toString()) {
+      return res.status(400).json({ message: 'Incorrect OTP. Please try again.' });
+    }
+
     // Get full user from database
     const result = await pool.query(
       'SELECT id, full_name, phone, role FROM users WHERE phone = $1',
@@ -274,6 +349,9 @@ export const verifyLoginOTP = async (req: Request, res: Response): Promise<any> 
     }
 
     const user = result.rows[0];
+
+    // Clean up
+    if (otpId) await pool.query('DELETE FROM otps WHERE id = $1', [otpId]);
     delete otpStore[phone];
 
     const token = jwt.sign(
