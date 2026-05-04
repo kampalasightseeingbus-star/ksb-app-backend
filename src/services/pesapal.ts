@@ -101,6 +101,7 @@ export const submitOrder = async (
 ): Promise<{ order_tracking_id: string; redirect_url: string }> => {
   try {
     const token = await getPesapalToken();
+    console.log('✅ Got token for submit order');
 
     // Get or register IPN
     let ipnId = process.env.PESAPAL_IPN_ID;
@@ -108,7 +109,7 @@ export const submitOrder = async (
       ipnId = await registerIPN();
       process.env.PESAPAL_IPN_ID = ipnId;
     }
-
+    console.log('✅ Using IPN ID:', ipnId);
     const merchantReference = `KSB-${String(bookingId).padStart(6, '0')}-${Date.now()}`;
 
     const orderData = {
@@ -126,17 +127,31 @@ export const submitOrder = async (
         country_code: 'UG',
       },
     };
+    console.log('📤 Submitting order to Pesapal:', JSON.stringify(orderData));
 
-    const response = await axios.post(
-      `${PESAPAL_BASE_URL}/api/Transactions/SubmitOrderRequest`,
-      orderData,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+        let response;
+    try {
+      response = await axios.post(
+        `${PESAPAL_BASE_URL}/api/Transactions/SubmitOrderRequest`,
+        orderData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 30000, // 30 second timeout
+        }
+      );
+      console.log('📥 Pesapal response:', response.status, JSON.stringify(response.data));
+    } catch (axiosErr: any) {
+      console.error('❌ Axios error:', {
+        message: axiosErr.message,
+        code: axiosErr.code,
+        status: axiosErr.response?.status,
+        data: axiosErr.response?.data,
+      });
+      throw new Error(axiosErr.response?.data?.message || axiosErr.message || 'Failed to submit order');
+    }
 
     if (response.data.status === '200') {
       console.log('✅ Pesapal order submitted:', response.data.order_tracking_id);
