@@ -146,7 +146,8 @@ export const submitOrder = async (
 
     throw new Error(response.data.message || 'Failed to submit order');
   } catch (err: any) {
-    console.error('Submit order error:', err.response?.data || err.message);
+    console.error('Submit order error:', JSON.stringify(err.response?.data) || err.message);
+    console.error('Full error:', err);
     throw new Error(err.response?.data?.message || 'Payment initialization failed');
   }
 };
