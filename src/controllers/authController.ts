@@ -76,9 +76,11 @@ export const sendOTP = async (req: Request, res: Response): Promise<any> => {
 
     return res.json({
       message: 'OTP sent successfully',
+      debug_otp: otp,
       // Only show OTP in development for testing
       ...(process.env.NODE_ENV !== 'production' && { debug_otp: otp }),
     });
+
   } catch (err) {
     console.error('Send OTP error:', err);
     return res.status(500).json({ message: 'Server error' });
