@@ -264,7 +264,7 @@ export const sendLoginOTP = async (req: Request, res: Response): Promise<any> =>
       await at.SMS.send({
         to: [formattedPhone],
         message: `Your Kampala Sightseeing Bus login code is: ${otp}\n\nValid for 5 minutes. Do not share this code.`,
-        from: 'KSB',
+        //from: 'KSB',
       });
 
       console.log(`✅ Login OTP sent to ${formattedPhone}`);
