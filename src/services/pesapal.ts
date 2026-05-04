@@ -123,6 +123,7 @@ export const submitOrder = async (
         last_name: customerName.split(' ').slice(1).join(' ') || customerName,
         phone_number: customerPhone,
         email_address: customerEmail || `${customerPhone}@ksb.ug`,
+        country_code: 'UG',
       },
     };
 
