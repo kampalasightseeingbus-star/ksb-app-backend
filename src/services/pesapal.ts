@@ -32,6 +32,7 @@ export const getPesapalToken = async (): Promise<string> => {
         headers: { 'Content-Type': 'application/json' },
       }
     );
+        console.log('Pesapal submit order response:', JSON.stringify(response.data));
 
     if (response.data.status === '200') {
       accessToken = response.data.token;
@@ -145,10 +146,13 @@ export const submitOrder = async (
     }
 
     throw new Error(response.data.message || 'Failed to submit order');
-  } catch (err: any) {
-    console.error('Submit order error:', JSON.stringify(err.response?.data) || err.message);
-    console.error('Full error:', err);
-    throw new Error(err.response?.data?.message || 'Payment initialization failed');
+    } catch (err: any) {
+    console.error('Submit order error:', {
+      status: err.response?.status,
+      data: err.response?.data,
+      message: err.message
+    });
+    throw new Error(err.response?.data?.message || err.message || 'Payment initialization failed');
   }
 };
 
