@@ -65,28 +65,36 @@ export const sendOTP = async (req: Request, res: Response): Promise<any> => {
 
     // Send SMS via Africa's Talking
     try {
-      const AfricasTalking = require('africastalking');
-      const at = AfricasTalking({
-        apiKey: process.env.AT_API_KEY,
-        username: process.env.AT_USERNAME,
-      });
-
-      await at.SMS.send({
-        to: [formattedPhone],
-        message: `Your Kampala Sightseeing Bus verification code is: ${otp}\n\nValid for 5 minutes. Do not share this code.`,
-        from: 'KSB',
-      });
+      const axios = require('axios');
+      
+      const response = await axios.post(
+        'https://api.africastalking.com/version1/messaging',
+        new URLSearchParams({
+          username: process.env.AT_USERNAME,
+          to: formattedPhone,
+          message: `Your Kampala Sightseeing Bus verification code is: ${otp}\n\nValid for 5 minutes. Do not share this code.`,
+          from: 'KSB',
+        }),
+        {
+          headers: {
+            'apiKey': process.env.AT_API_KEY,
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json',
+          },
+        }
+      );
 
       console.log(`✅ OTP sent to ${formattedPhone}`);
-    } catch (smsErr) {
+      console.log('SMS Response:', JSON.stringify(response.data));
+    } catch (smsErr: any) {
       // SMS failed but don't block the flow in development
-      console.error('SMS send failed:', smsErr);
+      console.error('SMS send failed:', smsErr.response?.data || smsErr.message);
       console.log(`🔐 DEV OTP for ${phone}: ${otp}`);
     }
 
     return res.json({
       message: 'OTP sent successfully',
-      debug_otp: otp,
+      ...(process.env.NODE_ENV !== 'production' && { debug_otp: otp }),
     });
   } catch (err) {
     console.error('Send OTP error:', err);
@@ -258,11 +266,12 @@ export const sendLoginOTP = async (req: Request, res: Response): Promise<any> =>
       const axios = require('axios');
       
       const response = await axios.post(
-        'https://api.sandbox.africastalking.com/version1/messaging',
+        'https://api.africastalking.com/version1/messaging',
         new URLSearchParams({
           username: process.env.AT_USERNAME,
           to: formattedPhone,
-          message: `Your Kampala Sightseeing Bus verification code is: ${otp}\n\nValid for 5 minutes. Do not share this code.`,
+          message: `Your Kampala Sightseeing Bus login code is: ${otp}\n\nValid for 5 minutes. Do not share this code.`,
+          from: 'KSB',
         }),
         {
           headers: {
@@ -273,16 +282,16 @@ export const sendLoginOTP = async (req: Request, res: Response): Promise<any> =>
         }
       );
 
-      console.log(`✅ OTP sent to ${formattedPhone}`);
+      console.log(`✅ Login OTP sent to ${formattedPhone}`);
       console.log('SMS Response:', JSON.stringify(response.data));
     } catch (smsErr: any) {
       console.error('SMS send failed:', smsErr.response?.data || smsErr.message);
-      console.log(`🔐 DEV OTP for ${phone}: ${otp}`);
+      console.log(`🔐 DEV Login OTP for ${phone}: ${otp}`);
     }
 
     return res.json({
       message: 'OTP sent to your phone',
-      debug_otp: otp,
+      ...(process.env.NODE_ENV !== 'production' && { debug_otp: otp }),
     });
   } catch (err) {
     console.error('Send login OTP error:', err);
