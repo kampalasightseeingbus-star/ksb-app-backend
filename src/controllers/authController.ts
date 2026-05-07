@@ -73,7 +73,7 @@ export const sendOTP = async (req: Request, res: Response): Promise<any> => {
           username: process.env.AT_USERNAME,
           to: formattedPhone,
           message: `Your Kampala Sightseeing Bus verification code is: ${otp}\n\nValid for 5 minutes. Do not share this code.`,
-          from: 'KSB',
+          //from: 'KSB',
         }),
         {
           headers: {
