@@ -74,7 +74,7 @@ export const initiatePayment = async (req: AuthRequest, res: Response): Promise<
       amount = 35 * numPassengers;
       paymentCurrency = 'USD';
     } else {
-      amount = schedule.price_ugx * numPassengers;
+      amount = 50000 * numPassengers;
       paymentCurrency = 'UGX';
     }
 
