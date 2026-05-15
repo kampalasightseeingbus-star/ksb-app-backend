@@ -7,6 +7,7 @@ dotenv.config();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2026-04-22.dahlia',
 });
+type PaymentIntent = Awaited<ReturnType<typeof stripe.paymentIntents.retrieve>>;
 
 // ─────────────────────────────────────────────────────────────────
 // CREATE PAYMENT INTENT
@@ -83,7 +84,7 @@ export const handleStripeWebhook = async (
     );
 
     if (event.type === 'payment_intent.succeeded') {
-      const paymentIntent = event.data.object as StripeTypes.PaymentIntent;
+      const paymentIntent = event.data.object as PaymentIntent;
       return {
         bookingRef: paymentIntent.metadata.booking_ref,
         status: 'SUCCESSFUL',
@@ -91,7 +92,7 @@ export const handleStripeWebhook = async (
     }
 
     if (event.type === 'payment_intent.payment_failed') {
-      const paymentIntent = event.data.object as StripeTypes.PaymentIntent;
+      const paymentIntent = event.data.object as PaymentIntent;
       return {
         bookingRef: paymentIntent.metadata.booking_ref,
         status: 'FAILED',
