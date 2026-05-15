@@ -66,4 +66,11 @@ app.listen(PORT, () => {
   console.log(`📡 API available at http://localhost:${PORT}`);
 });
 
+// Stripe needs raw body for webhook signature verification
+app.use('/api/payments/webhook/stripe', express.raw({ type: 'application/json' }));
+
+// All other routes use JSON
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 export default app;
